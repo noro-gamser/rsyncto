@@ -31,10 +31,18 @@ get_current_time() {
     date +%H:%M
 }
 
-# Function to get the bandwidth limit based on ping time
+# Function to get the bandwidth limit based on ping time or night mode
 get_bwlimit() {
     local ping_time=$1
     local ping_time_int=$(convert_to_minutes "$ping_time")
+    local current_time=$(get_current_time)
+    local current_time_int=$(convert_to_minutes "$current_time")
+
+    # Check if night mode is active and within the specified time range
+    if [ "$NIGHT_MODE" = true ] && [[ "$current_time_int" -ge "$(convert_to_minutes "$night_start")" || "$current_time_int" -lt "$(convert_to_minutes "$night_stop")" ]]; then
+        echo "$bwlimit_night"
+        return
+    fi
 
     if [ -n "${ping_stufen[@]}" ]; then
         for (( i = 0; i < ${#ping_stufen[@]}; i++ )); do
@@ -72,7 +80,7 @@ sync_data() {
     local destination_folder=$2
 
     echo "Transferring data from $source_folder to $destination_folder..."
-    rsync --bwlimit="$bwlimit" -avz "$source_folder" "$destination_folder" >> "$log_file" 2>> "$error_log_file"
+    rsync --bwlimit="$(get_bwlimit "$ping_time")" -avz "$source_folder" "$destination_folder" >> "$log_file" 2>> "$error_log_file"
 
     # Perform partial hash check on subfolders
     IFS= find "$source_folder" -type d | while read -r subfolder; do
@@ -106,11 +114,6 @@ check_hash() {
 # Main function
 main() {
     load_config
-
-    # Perform ping test and get bandwidth limit
-    # ...
-
-    bwlimit=$(get_bwlimit "$ping_time")
 
     # Synchronize data using rsync
     sync_data "$quelle" "$ziel"
